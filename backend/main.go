@@ -1001,6 +1001,28 @@ func main() {
 		writeErr(w, http.StatusNotFound, "Rota não encontrada")
 	})
 
+	// Serve built Frontend SPA (static files + React Router/SPA fallback)
+	staticDir := os.Getenv("STATIC_DIR")
+	if staticDir == "" {
+		staticDir = "./public"
+	}
+	if info, err := os.Stat(staticDir); err == nil && info.IsDir() {
+		fs := http.FileServer(http.Dir(staticDir))
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasPrefix(r.URL.Path, "/api/") {
+				writeErr(w, http.StatusNotFound, "Endpoint da API não encontrado")
+				return
+			}
+			cleanPath := filepath.Clean(strings.TrimPrefix(r.URL.Path, "/"))
+			fullPath := filepath.Join(staticDir, cleanPath)
+			if st, err := os.Stat(fullPath); err == nil && !st.IsDir() {
+				fs.ServeHTTP(w, r)
+				return
+			}
+			http.ServeFile(w, r, filepath.Join(staticDir, "index.html"))
+		})
+	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
